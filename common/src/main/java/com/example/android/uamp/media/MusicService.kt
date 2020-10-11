@@ -18,7 +18,9 @@ package com.example.android.uamp.media
 
 import android.app.Notification
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.content.res.AssetManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.ResultReceiver
@@ -68,6 +70,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 
 /**
  * This class is the entry point for browsing and playback commands from the APP's UI
@@ -159,6 +166,8 @@ open class MusicService : MediaBrowserServiceCompat() {
     override fun onCreate() {
         super.onCreate()
 
+        copyAssets(this)
+
         // Build a PendingIntent that can be used to launch the UI.
         val sessionActivityPendingIntent =
             packageManager?.getLaunchIntentForPackage(packageName)?.let { sessionIntent ->
@@ -199,7 +208,7 @@ open class MusicService : MediaBrowserServiceCompat() {
         // and then use a suspend function to perform the download off the main thread.
         mediaSource = JsonSource(source = remoteJsonSource)
         serviceScope.launch {
-            mediaSource.load()
+            mediaSource.load(this@MusicService)
         }
 
         // ExoPlayer will manage the MediaSession for us.
@@ -500,7 +509,10 @@ open class MusicService : MediaBrowserServiceCompat() {
                 } else {
 
                     val playbackStartPositionMs =
-                        extras?.getLong(MEDIA_DESCRIPTION_EXTRAS_START_PLAYBACK_POSITION_MS, C.TIME_UNSET)
+                        extras?.getLong(
+                            MEDIA_DESCRIPTION_EXTRAS_START_PLAYBACK_POSITION_MS,
+                            C.TIME_UNSET
+                        )
                             ?: C.TIME_UNSET
 
                     preparePlaylist(
@@ -650,6 +662,70 @@ open class MusicService : MediaBrowserServiceCompat() {
             ).show()
         }
     }
+
+    private fun copyAssets(context: Context) {
+        val assetManager: AssetManager = assets
+        var files: Array<String>? = null
+        try {
+            files = assetManager.list("")
+        } catch (e: IOException) {
+            Log.e("tag", "Failed to get asset file list.", e)
+        }
+        if (files != null) for (filename in files) {
+            var input: InputStream? = null
+            var out: OutputStream? = null
+            try {
+                input = assetManager.open(filename)
+                val outFile = File(getCoversyPath(context), filename)
+
+                out = FileOutputStream(outFile)
+                copyFile(input, out)
+            } catch (e: IOException) {
+                Log.e("tag", "Failed to copy asset file: $filename", e)
+            } finally {
+                if (input != null) {
+                    try {
+                        input.close()
+                    } catch (e: IOException) {
+                        // NOOP
+                    }
+                }
+                if (out != null) {
+                    try {
+                        out.close()
+                    } catch (e: IOException) {
+                        // NOOP
+                    }
+                }
+            }
+        }
+    }
+
+    @Throws(IOException::class)
+    private fun copyFile(input: InputStream?, out: OutputStream?) {
+        val buffer = ByteArray(1024)
+        var read: Int
+        input?.let { inputNN ->
+            while (inputNN.read(buffer).also { read = it } != -1) {
+                out?.write(buffer, 0, read)
+            }
+        }
+    }
+
+    private fun getCoversyPath(context: Context): String {
+        // TODO handle storage state
+        var filesDir = context.getExternalFilesDir(null)
+        if (filesDir == null) {
+            filesDir = context.filesDir
+        }
+        val localInternalStorageFilesPath =
+            File(filesDir.toString() + "/" + "Covers")
+        if (!localInternalStorageFilesPath.exists()) {
+            localInternalStorageFilesPath.mkdir()
+        }
+        return localInternalStorageFilesPath.absolutePath
+    }
+
 }
 
 /*

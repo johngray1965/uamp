@@ -16,6 +16,7 @@
 
 package com.example.android.uamp.media.library
 
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
@@ -41,7 +42,7 @@ interface MusicSource : Iterable<MediaMetadataCompat> {
     /**
      * Begins loading the data for this music source.
      */
-    suspend fun load()
+    suspend fun load(context: Context)
 
     /**
      * Method which will perform a given action after this [MusicSource] is ready to be used.

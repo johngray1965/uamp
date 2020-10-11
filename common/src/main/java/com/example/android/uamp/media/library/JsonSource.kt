@@ -18,9 +18,12 @@ package com.example.android.uamp.media.library
 
 import android.content.Context
 import android.net.Uri
+import android.os.StrictMode
+import android.os.StrictMode.VmPolicy
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaDescriptionCompat.STATUS_NOT_DOWNLOADED
 import android.support.v4.media.MediaMetadataCompat
+import androidx.core.content.FileProvider
 import com.example.android.uamp.media.extensions.album
 import com.example.android.uamp.media.extensions.albumArtUri
 import com.example.android.uamp.media.extensions.artist
@@ -41,6 +44,7 @@ import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
+import java.io.File
 import java.io.IOException
 import java.io.InputStreamReader
 import java.net.URL
@@ -62,8 +66,8 @@ class JsonSource(private val source: Uri) : AbstractMusicSource() {
 
     override fun iterator(): Iterator<MediaMetadataCompat> = catalog.iterator()
 
-    override suspend fun load() {
-        updateCatalog(source)?.let { updatedCatalog ->
+    override suspend fun load(context: Context) {
+        updateCatalog(context, source)?.let { updatedCatalog ->
             catalog = updatedCatalog
             state = STATE_INITIALIZED
         } ?: run {
@@ -76,7 +80,7 @@ class JsonSource(private val source: Uri) : AbstractMusicSource() {
      * Function to connect to a remote URI and download/process the JSON file that corresponds to
      * [MediaMetadataCompat] objects.
      */
-    private suspend fun updateCatalog(catalogUri: Uri): List<MediaMetadataCompat>? {
+    private suspend fun updateCatalog(context: Context, catalogUri: Uri): List<MediaMetadataCompat>? {
         return withContext(Dispatchers.IO) {
             val musicCat = try {
                 downloadJson(catalogUri)
@@ -102,8 +106,13 @@ class JsonSource(private val source: Uri) : AbstractMusicSource() {
                 MediaMetadataCompat.Builder()
                     .from(song)
                     .apply {
-                        displayIconUri = song.image // Used by ExoPlayer and Notification
-                        albumArtUri = song.image
+                        val filesDir = context.getExternalFilesDir(null)
+
+                        val filePath: File = File((filesDir?.toString() ?: "") + File.separator + "Covers/art.jpg")
+                        val iconUri = getUriFromFileProvider(context, filePath)
+
+                        displayIconUri = iconUri.toString() // Used by ExoPlayer and Notification
+                        albumArtUri = iconUri.toString()
                     }
                     .build()
             }.toList()
@@ -114,6 +123,20 @@ class JsonSource(private val source: Uri) : AbstractMusicSource() {
         }
     }
 
+    fun getUriFromFileProvider(context: Context?, filePath: File?): Uri? {
+        val icon: Uri?
+        icon = try {
+            FileProvider.getUriForFile(
+                context!!,
+                "com.example.android.uamp.fileprovider", filePath!!
+            )
+        } catch (e: IllegalArgumentException) {
+            val builder = VmPolicy.Builder()
+            StrictMode.setVmPolicy(builder.build())
+            Uri.fromFile(filePath)
+        }
+        return icon
+    }
 
     /**
      * Attempts to download a catalog from a given Uri.

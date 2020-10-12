@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <files-path name="covers" path="Covers" />
+    <external-path android:path="Covers/" name="Covers" path="Covers/"/>
+    <external-files-path path="Covers/" name="Covers"/>
+</paths>
